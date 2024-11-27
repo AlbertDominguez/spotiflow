@@ -851,7 +851,7 @@ class Spotiflow(nn.Module):
                     ys, flows = [], []
                     if tta_n_angles == 2:
                         angles = (0, 180)
-                    if tta_n_angles == 3:
+                    elif tta_n_angles == 3:
                         angles = (0, 90, 180)
                     elif tta_n_angles == 4:
                         angles = (0, 90, 180, 270)
@@ -964,7 +964,7 @@ class Spotiflow(nn.Module):
                 flow = flow[0]
 
         else:  # Predict with tiling
-            if tta:
+            if tta_n_angles > 1:
                 raise NotImplementedError("TTA is not supported when tiling yet.")
             padded_shape = tuple(np.array(x.shape[:actual_n_dims]) // corr_grid)
             if not skip_details:
