@@ -716,7 +716,7 @@ class Spotiflow(nn.Module):
         ] = None,
         distributed_params: Optional[dict] = None,
         fit_params: bool = False,
-        tta: bool = False,
+        tta_n_angles: int = 1,
     ) -> Tuple[np.ndarray, SimpleNamespace]:
         """Predict spots in an image.
 
@@ -844,19 +844,26 @@ class Spotiflow(nn.Module):
                     img_t = img_t.permute(0, 3, 1, 2)  # BHWC -> BCHW
                 else:
                     img_t = img_t.permute(0, 4, 1, 2, 3)  # BDHWC -> BCDHW
-                if tta:
+                if tta_n_angles > 1:
                     if not self.config.is_3d:
                         raise NotImplementedError("TTA is not supported in 2D mode yet.")
                     rot_tta = tta3d.Rotation90TestTimeAugmentation()
                     ys, flows = [], []
-                    angles = (0, 90, 180)
+                    if tta_n_angles == 2:
+                        angles = (0, 180)
+                    if tta_n_angles == 3:
+                        angles = (0, 90, 180)
+                    elif tta_n_angles == 4:
+                        angles = (0, 90, 180, 270)
+                    else:
+                        raise ValueError("Invalid number of angles for TTA (1,2,3,4).")
                     for angle in tqdm(angles, "TTA|Rot90", disable=not verbose):
                         img_r = rot_tta.apply(img_t, angle)
                         out = self(img_r)
                         ys.append(
                             self._sigmoid(rot_tta.revert(out["heatmaps"][0], angle).squeeze(0)).detach().cpu().numpy()[None]
                         )
-                        if subpix_radius >= 0 and angle == 0: # TODO: is simply aggregating the flow valid given its relative component?
+                        if subpix_radius >= 0 and angle == 0: # TODO: is simply mean-aggregating the flow valid given its relative component?
                             flows.append(
                                 rot_tta.revert(out["flow"][0], angle).permute(1, 2, 3, 0).detach().cpu().numpy()[None]
                             )
