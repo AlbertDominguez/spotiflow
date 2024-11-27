@@ -20,7 +20,7 @@ from scipy.ndimage import zoom
 from tqdm.auto import tqdm
 from typing_extensions import Self
 
-from ..augmentations import transforms, transforms3d
+from ..augmentations import transforms, transforms3d, tta3d
 from ..augmentations.pipeline import Pipeline as AugmentationPipeline
 from ..data import Spots3DDataset, SpotsDataset
 from ..utils import (
@@ -716,6 +716,7 @@ class Spotiflow(nn.Module):
         ] = None,
         distributed_params: Optional[dict] = None,
         fit_params: bool = False,
+        tta: bool = False,
     ) -> Tuple[np.ndarray, SimpleNamespace]:
         """Predict spots in an image.
 
@@ -843,29 +844,51 @@ class Spotiflow(nn.Module):
                     img_t = img_t.permute(0, 3, 1, 2)  # BHWC -> BCHW
                 else:
                     img_t = img_t.permute(0, 4, 1, 2, 3)  # BDHWC -> BCDHW
-                out = self(img_t)
-
-                y = (
-                    self._sigmoid(out["heatmaps"][0].squeeze(0)).detach().cpu().numpy()
-                )  # C'HW
-                if subpix_radius >= 0:
+                if tta:
                     if not self.config.is_3d:
-                        flow = (
-                            out["flow"][0]
-                            .permute(1, 2, 0)
-                            .detach()
-                            .cpu()
-                            .numpy()
-                        )  # HW(3*C')
-                    else:
-                        flow = (
-                            out["flow"][0]
-                            .permute(1, 2, 3, 0)
-                            .detach()
-                            .cpu()
-                            .numpy()
-                        )  # HW(4*C')
+                        raise NotImplementedError("TTA is not supported in 2D mode yet.")
+                    rot_tta = tta3d.Rotation90TestTimeAugmentation()
+                    ys, flows = [], []
+                    angles = (0, 90, 180)
+                    for angle in tqdm(angles, "TTA|Rot90", disable=not verbose):
+                        img_r = rot_tta.apply(img_t, angle)
+                        out = self(img_r)
+                        ys.append(
+                            self._sigmoid(rot_tta.revert(out["heatmaps"][0], angle).squeeze(0)).detach().cpu().numpy()[None]
+                        )
+                        if subpix_radius >= 0 and angle == 0: # TODO: is simply aggregating the flow valid given its relative component?
+                            flows.append(
+                                rot_tta.revert(out["flow"][0], angle).permute(1, 2, 3, 0).detach().cpu().numpy()[None]
+                            )
+                        del img_r, out
 
+                    y = np.mean(np.concatenate(ys), axis=0)
+                    if subpix_radius >= 0:
+                        flow = np.mean(np.concatenate(flows), axis=0)
+                    del ys, flows
+                else:
+                    out = self(img_t)
+
+                    y = (
+                        self._sigmoid(out["heatmaps"][0].squeeze(0)).detach().cpu().numpy()
+                    )  # C'HW
+                    if subpix_radius >= 0:
+                        if not self.config.is_3d:
+                            flow = (
+                                out["flow"][0]
+                                .permute(1, 2, 0)
+                                .detach()
+                                .cpu()
+                                .numpy()
+                            )  # HW(3*C')
+                        else:
+                            flow = (
+                                out["flow"][0]
+                                .permute(1, 2, 3, 0)
+                                .detach()
+                                .cpu()
+                                .numpy()
+                            )  # HW(4*C')
             if scale is not None and scale != 1:
                 y = zoom(y, (1.0, 1.0 / scale, 1.0 / scale), order=1)
             if subpix_radius >= 0:
@@ -934,6 +957,8 @@ class Spotiflow(nn.Module):
                 flow = flow[0]
 
         else:  # Predict with tiling
+            if tta:
+                raise NotImplementedError("TTA is not supported when tiling yet.")
             padded_shape = tuple(np.array(x.shape[:actual_n_dims]) // corr_grid)
             if not skip_details:
                 y = np.empty(padded_shape, np.float32)
