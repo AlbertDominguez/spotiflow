@@ -64,8 +64,11 @@ class TranslationYX3D(BaseAugmentation):
                                 shear=0,
                                 interpolation=self._interp_mode)
 
-
-        pts_translated = pts + torch.concat((torch.zeros(1, device=img.device), sampled_translation), axis=0)
+        if pts.shape[-1] == 4: # Class labels
+            pts_translated = pts[...,:-1] + torch.concat((torch.zeros(1, device=img.device), sampled_translation), axis=0)
+            pts_translated = torch.cat([pts_translated, pts[...,-1:]], dim=-1)
+        else:
+            pts_translated = pts + torch.concat((torch.zeros(1, device=img.device), sampled_translation), axis=0)
         idxs_in = _filter_points_idx(pts_translated, img_translated.shape[-3:])
         pts_translated = pts_translated[idxs_in].view(*pts.shape[:-2], -1, pts.shape[-1])
         return img_translated, pts_translated

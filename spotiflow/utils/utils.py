@@ -113,8 +113,8 @@ def read_coords_csv(fname: str, add_class_column: bool = False) -> np.ndarray:
 
     return points
 
-
-def read_coords_csv3d(fname: str) -> np.ndarray:
+# TODO: add_class_column is set to False for now not to break downstream code, but it shouldn't even be a parameter
+def read_coords_csv3d(fname: str, add_class_column: bool=False) -> np.ndarray:
     """Parses a csv file and returns correctly ordered points array
 
     Args:
@@ -137,6 +137,17 @@ def read_coords_csv3d(fname: str) -> np.ndarray:
             points = df[list(possible_columns)].to_numpy()
             break
 
+    if add_class_column:
+        class_col_candidates = ("class", "label", "category", "channel", "particle")
+
+        class_labels = np.zeros((points.shape[0], 1), dtype=np.float32)
+        for possible_class_column in class_col_candidates:
+            if possible_class_column in cols:
+                class_labels = (
+                    df[possible_class_column].to_numpy().reshape(-1, 1).astype(np.uint8)
+                )
+                break
+        points = np.concatenate((points, class_labels), axis=1)
     if points is None:
         raise ValueError(f"could not get points from csv file {fname}")
 
@@ -188,13 +199,15 @@ def multiscale_decimate(
     if is_3d:
         if len(decimate) == 2 and y.ndim == 3:  # 3D Image
             decimate = (decimate[0], *decimate)
+        if len(decimate) == 3 and y.ndim == 4: # Multichannel 3D image
+            decimate = (1, *decimate)
     else:
         if len(decimate) == 2 and y.ndim == 3:  # Multichannel image
             decimate = (1, *decimate)
     assert y.ndim == len(
         decimate
     ), f"decimate {decimate} and y.ndim {y.ndim} do not match"
-    if decimate == (1, 1) or decimate == (1, 1, 1):
+    if all(d==1 for d in decimate):
         return y
 
     y = block_reduce(y, decimate, np.max)

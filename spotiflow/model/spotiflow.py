@@ -359,7 +359,7 @@ class Spotiflow(nn.Module):
             dataset_kwargs: additional arguments to pass to the SpotsDataset class. Defaults to no additional arguments.
         """
         # Make sure data is OK
-        self._validate_fit_inputs(train_images, train_spots, val_images, val_spots)
+        # ! self._validate_fit_inputs(train_images, train_spots, val_images, val_spots)
 
         # Generate default training config if none is given
         if train_config is None:
@@ -443,7 +443,7 @@ class Spotiflow(nn.Module):
             train_spots,
             augmenter=tr_augmenter,
             grid=self.config.grid,
-            add_class_label=not self.config.is_3d,
+            add_class_label=True, #! not self.config.is_3d,
             **train_dataset_kwargs,
         )
         val_ds = ActualSpotsDataset(
@@ -451,7 +451,7 @@ class Spotiflow(nn.Module):
             val_spots,
             augmenter=val_augmenter,
             grid=self.config.grid,
-            add_class_label=not self.config.is_3d,
+            add_class_label=True, #! not self.config.is_3d,
             **val_dataset_kwargs,
         )
 

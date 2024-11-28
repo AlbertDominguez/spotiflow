@@ -170,9 +170,9 @@ class SpotiflowModelConfig(SpotiflowConfig):
         assert (
             isinstance(self.in_channels, int) and self.in_channels > 0
         ), "in_channels must be greater than 0"
-        assert (
-            isinstance(self.out_channels, int) and self.out_channels == 1
-        ), "out_channels must be equal to 1 (multi-channel output not supported yet)"
+        # assert (
+        #     isinstance(self.out_channels, int) and self.out_channels == 1
+        # ), "out_channels must be equal to 1 (multi-channel output not supported yet)"
         assert (
             isinstance(self.initial_fmaps, int) and self.initial_fmaps > 0
         ), "initial_fmaps must be greater than 0"

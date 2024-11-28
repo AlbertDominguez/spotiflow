@@ -41,6 +41,7 @@ class SpotsDataset(Dataset):
         normalizer: Union[Literal["auto"], Callable, None] = "auto",
         add_class_label: bool = True,
         grid: Optional[Sequence[int]] = None,
+        is_3d: bool = False,
     ) -> Self:
         """ Constructor
 
@@ -59,9 +60,9 @@ class SpotsDataset(Dataset):
 
         # Build downsample factors as tuple in case input list contains integers
         self._downsample_factors = [
-            t if isinstance(t, tuple) else (t, t) for t in downsample_factors
+            t if isinstance(t, tuple) else (t, t) if not is_3d else (t, t, t) for t in downsample_factors
         ]
-
+        self._is_3d = is_3d
         self._centers = centers
         self._images = images
 
@@ -84,15 +85,15 @@ class SpotsDataset(Dataset):
         self._n_classes = 1
         if add_class_label:
             assert all(p.shape[1] == centers[0].shape[1] for p in centers), "All center arrays should have the same number of columns!"
-            if centers[0].shape[1] == 3:
-                assert min(p[:, 2].min() for p in centers if p.shape[0] > 0) == 0, "Class labels should start at 0!"
-                self._n_classes = max(p[:, 2].astype(int).max() for p in centers if p.shape[0] > 0) + 1
+            if centers[0].shape[1] == 3+int(self._is_3d):
+                assert min(p[:, 2+int(self._is_3d)].min() for p in centers if p.shape[0] > 0) == 0, "Class labels should start at 0!"
+                self._n_classes = max(p[:, 2+int(self._is_3d)].astype(int).max() for p in centers if p.shape[0] > 0) + 1
             else:
                 self._centers = [np.concatenate([p, np.zeros((p.shape[0], 1))], axis=1) for p in self._centers]
         if grid is None:
-            grid = (1,)*centers[0].shape[1]
+            grid = (1,)*(centers[0].shape[1]-int(add_class_label))
         self._grid = grid
-        assert len(self._grid) == centers[0].shape[1], "Grid size should have the same dimensionality as the input!"
+        assert len(self._grid) == centers[0].shape[1]-int(add_class_label), "Grid size should have the same dimensionality as the input!"
         assert all(g > 0 for g in self._grid), "Grid size should be positive!"
         assert all(g == 1 or g%2 == 0 for g in self._grid), "Grid elements should be either 1 or an odd integer > 1!"
 

@@ -42,7 +42,10 @@ class Crop3D(BaseAugmentation):
         # img_c = tvf.crop(img, top=cy, left=cx, height=self.size[0], width=self.size[1])
 
         # Crop points
-        pts_c = pts - torch.FloatTensor([cz, cy, cx])
+        if pts.shape[-1] == 3:
+            pts_c = pts - torch.FloatTensor([cz, cy, cx])
+        else:
+            pts_c = pts - torch.FloatTensor([cz, cy, cx, 0])
         idxs_in = _filter_points_idx(pts_c, self.size)
         return img_c, pts_c[idxs_in].view(*pts.shape[:-2], -1, pts.shape[-1])
     
@@ -64,7 +67,7 @@ class Crop3D(BaseAugmentation):
             else:
                 # select a point 
                 center_idx = torch.randint(0, valid_pt_coords.shape[0], (1,)).item()
-                cz, cy, cx = valid_pt_coords[center_idx]
+                cz, cy, cx = valid_pt_coords[center_idx, :3]
                 cz = cz + torch.randint(-width[0], width[0]+1, (1,))
                 cy = cy + torch.randint(-width[1], width[1]+1, (1,))
                 cx = cx + torch.randint(-width[2], width[2]+1, (1,))

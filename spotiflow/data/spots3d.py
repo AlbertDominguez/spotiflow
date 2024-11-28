@@ -27,6 +27,9 @@ log.addHandler(console_handler)
 
 class Spots3DDataset(SpotsDataset):
     """Base spot dataset class instantiated with loaded images and centers."""
+    def __init__(self, images, centers, **kwargs) -> None:
+        super().__init__(images, centers, is_3d=True, **kwargs)
+
     def __getitem__(self, idx: int) -> Dict:
         img, centers = self.images[idx], self._centers[idx]
 
@@ -41,23 +44,35 @@ class Spots3DDataset(SpotsDataset):
         img, centers = img.squeeze(0), centers.squeeze(0)  # Remove B dimension
 
         if self._compute_flow:
-            flow = utils.points_to_flow3d(
-                centers.numpy(), img.shape[-3:], sigma=self._sigma, grid=self._grid,
-            ).transpose((3, 0, 1, 2))
-            flow = torch.from_numpy(flow).float()
+            for cl in range(self._n_classes):
+                curr_centers = centers[centers[:, 3] == cl][:, :3]
+                curr_flow = utils.points_to_flow3d(
+                    curr_centers.numpy(), img.shape[-3:], sigma=self._sigma, grid=self._grid,
+                ).transpose((3, 0, 1, 2))
+                curr_flow = torch.from_numpy(curr_flow).float() # shape is (4,D,H,W)
+                if cl == 0:
+                    flow = curr_flow.clone()
+                else:
+                    flow = torch.cat((flow, curr_flow), dim=0) # shape will be (4*n_classes, D, H, W)
+                del curr_flow
 
-
-        heatmap_lv0 = utils.points_to_prob3d(
-            centers.numpy(), img.shape[-3:], mode=self._mode, sigma=self._sigma, grid=self._grid,
-        )
-
+        for cl in range(self._n_classes):
+            curr_centers = centers[centers[:, 3] == cl][:, :3]
+            curr_heatmap = utils.points_to_prob3d(
+                curr_centers.numpy(), img.shape[-3:], mode=self._mode, sigma=self._sigma, grid=self._grid,
+            )[None, ...]
+            if cl == 0:
+                heatmap_lv0 = curr_heatmap.copy()
+            else:
+                heatmap_lv0 = np.concatenate((heatmap_lv0, curr_heatmap), axis=0) # shape will be (n_classes, D, H, W)
+            del curr_heatmap
         # Build target at different resolution levels
         heatmaps = [
             utils.multiscale_decimate(heatmap_lv0, ds, is_3d=True)
             for ds in self._downsample_factors
         ]
 
-        # Cast to tensor and add channel dimension
+        # Cast to float and add channel dimension
         ret_obj = {"img": img.float(), "pts": centers.float()}
 
         if self._compute_flow:
@@ -65,7 +80,7 @@ class Spots3DDataset(SpotsDataset):
 
         ret_obj.update(
             {
-                f"heatmap_lv{lv}": torch.from_numpy(heatmap.copy()).unsqueeze(0)
+                f"heatmap_lv{lv}": torch.from_numpy(heatmap.copy())#.unsqueeze(0)
                 for lv, heatmap in enumerate(heatmaps)
             }
         )
@@ -108,7 +123,6 @@ class Spots3DDataset(SpotsDataset):
         assert not add_class_label, "add_class_label not supported for 3D datasets yet."
         if isinstance(path, str):
             path = Path(path)
-        image_files = sorted(path.glob("*.tif"))
         center_files = sorted(path.glob("*.csv"))
 
         image_files = sorted(
@@ -133,7 +147,7 @@ class Spots3DDataset(SpotsDataset):
         images = [io.imread(img) for img in tqdm(image_files, desc="Loading images")]
 
         centers = [
-            utils.read_coords_csv3d(center).astype(np.float32)
+            utils.read_coords_csv3d(center, add_class_column=add_class_label).astype(np.float32)
             for center in tqdm(center_files, desc="Loading centers")
         ]
 

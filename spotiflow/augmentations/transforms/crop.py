@@ -63,7 +63,7 @@ class Crop(BaseAugmentation):
             else:
                 # select a point 
                 center_idx = torch.randint(0, valid_pt_coords.shape[0], (1,)).item()
-                cy, cx = valid_pt_coords[center_idx]
+                cy, cx = valid_pt_coords[center_idx, :2]
                 cy = cy +  torch.randint(-width[0], width[0]+1, (1,))
                 cx = cx +  torch.randint(-width[1], width[1]+1, (1,))
                 cy -= self.size[0]//2
