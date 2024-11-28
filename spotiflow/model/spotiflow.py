@@ -709,7 +709,7 @@ class Spotiflow(nn.Module):
         prob_thresh: Optional[float] = None,
         n_tiles: Tuple[int] = None,
         max_tile_size: int = None,
-        min_distance: int = 1,
+        min_distance: Union[int, Tuple[int]] = 1,
         exclude_border: bool = False,
         scale: Optional[int] = None,
         subpix: Optional[Union[bool, int]] = None,
@@ -723,6 +723,7 @@ class Spotiflow(nn.Module):
         distributed_params: Optional[dict] = None,
         fit_params: bool = False,
         tta_n_angles: int = 1,
+        return_details: bool = True,
     ) -> Tuple[np.ndarray, SimpleNamespace]:
         """Predict spots in an image.
 
@@ -743,14 +744,14 @@ class Spotiflow(nn.Module):
         Returns:
             Tuple[np.ndarray, SimpleNamespace]: Tuple of (points, details). Points are the coordinates of the spots. Details is a namespace containing the spot-wise probabilities (`prob`), the heatmap (`heatmap`), the stereographic flow (`flow`), the 2D local offset vector field (`subpix`) and the spot intensities (`intens`).
         """
-        if self.config.out_channels > 1:
-            raise NotImplementedError(
-                "Predicting with multiple channels is not supported yet."
-            )
+        # if self.config.out_channels > 1:
+        #     raise NotImplementedError(
+        #         "Predicting with multiple channels is not supported yet."
+        #     )
 
         skip_details = isinstance(
             img, da.Array
-        )  # Avoid computing details for non-NumPy inputs, which are assumed to be large
+        ) or not return_details # Avoid computing details for non-NumPy inputs, which are assumed to be large
 
         if subpix is False:
             subpix_radius = -1
@@ -945,7 +946,7 @@ class Spotiflow(nn.Module):
                     else prob_thresh[0],
                     exclude_border=exclude_border,
                     mode=peak_mode,
-                    min_distance=min_distance,
+                    min_distance=min_distance[cl] if not isinstance(min_distance, int) else min_distance,
                 )
                 curr_probs = ys[cl][tuple(curr_pts.astype(int).T)].tolist()
                 if subpix_radius >= 0:
@@ -958,18 +959,22 @@ class Spotiflow(nn.Module):
                 points.append(curr_pts)
                 probs.append(curr_probs)
 
-            assert (
-                self.config.out_channels == 1
-            ), "Trying to predict using a multi-channel network, which is not supported yet."
-            # ! FIXME: This is a temporary fix which will stop working when multi-channel output is implemented
-            points = points[0]
-            probs = probs[0]
-            y = ys[0]
-            if subpix_radius >= 0:
-                _subpix = _subpix[0]
-                flow = flow[0]
+            # assert (
+            #     self.config.out_channels == 1
+            # ), "Trying to predict using a multi-channel network, which is not supported yet."
+            # # ! FIXME: This is a temporary fix which will stop working when multi-channel output is implemented
+            # points = points[0]
+            # probs = probs[0]
+            # y = ys[0]
+            # if subpix_radius >= 0:
+            #     _subpix = _subpix[0]
+            #     flow = flow[0]
 
         else:  # Predict with tiling
+            if self.config.out_channels > 1:
+                raise NotImplementedError(
+                    "Tiled prediction with multiple channels is not supported yet."
+                )
             if tta_n_angles > 1:
                 raise NotImplementedError("TTA is not supported when tiling yet.")
             padded_shape = tuple(np.array(x.shape[:actual_n_dims]) // corr_grid)
@@ -1123,15 +1128,22 @@ class Spotiflow(nn.Module):
             if self.config.is_3d:
                 padding_to_correct = (*padding_to_correct, padding[2][0])
             points = points - np.array(padding_to_correct)[None] / corr_grid
-        probs = np.asarray(probs)
+        # probs = np.asarray(probs)
         # if scale is not None and scale != 1:
         #     points = np.round((points.astype(float) / scale)).astype(int)
-        probs = filter_shape(probs, out_shape, idxr_array=points)
-        pts = filter_shape(points, out_shape, idxr_array=points)
+        # probs = filter_shape(probs, out_shape, idxr_array=points)
+        pts = [None]*len(points)
+        for i in range(len(points)):
+            pts[i] = filter_shape(points[i], out_shape, idxr_array=points[i])
 
         if self.config.is_3d and any(s > 1 for s in self.config.grid):
-            pts *= np.asarray(self.config.grid)
+            for i in range(len(pts)):
+                pts[i] *= np.asarray(self.config.grid)
+        
+        for i in range(len(pts)):
+            pts[i] = np.concatenate((pts[i], i*np.ones((pts[i].shape[0], 1))), axis=1)
 
+        pts = np.concatenate(pts, axis=0)
         if skip_details:
             y = None
             _subpix = None
@@ -1149,19 +1161,22 @@ class Spotiflow(nn.Module):
             log.info(f"Found {len(pts)} spots")
 
         # Retrieve intensity of the spots
-        if (
-            subpix_radius < 0
-        ):  # no need to interpolate if subpixel precision is not used
-            intens = img[tuple(pts.astype(int).T)]
+        if not skip_details:
+            if (
+                subpix_radius < 0
+            ):  # no need to interpolate if subpixel precision is not used
+                intens = img[tuple(pts.astype(int).T)]
+            else:
+                try:
+                    _interp_fun = spline_interp_points_2d if not self.config.is_3d else spline_interp_points_3d
+                    intens = _interp_fun(img, pts)
+                except Exception as _:
+                    log.warning(
+                        "Spline interpolation failed to retrieve spot intensities. Will use nearest neighbour interpolation instead."
+                    )
+                    intens = img[tuple(pts.round().astype(int).T)]
         else:
-            try:
-                _interp_fun = spline_interp_points_2d if not self.config.is_3d else spline_interp_points_3d
-                intens = _interp_fun(img, pts)
-            except Exception as _:
-                log.warning(
-                    "Spline interpolation failed to retrieve spot intensities. Will use nearest neighbour interpolation instead."
-                )
-                intens = img[tuple(pts.round().astype(int).T)]
+            intens = None
         details = SimpleNamespace(
             prob=probs, heatmap=y, subpix=_subpix, flow=flow, intens=intens,
             fit_params=fit_params
