@@ -771,6 +771,9 @@ class Spotiflow(nn.Module):
             device = torch.device(device)
             if device is not None:
                 self.to(device)
+        
+        if not isinstance(min_distance, int):
+            assert len(min_distance) == self.config.out_channels, "Invalid min_distance length. It should be equal to the number of channels."
 
         if verbose:
             log.info(f"Will use device: {str(device)}")
