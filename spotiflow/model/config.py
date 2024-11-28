@@ -241,6 +241,8 @@ class SpotiflowTrainingConfig(SpotiflowConfig):
         finetuned_from: Optional[str] = None,
         early_stopping_patience: int = 0,
         crop_size_depth: int = 32,
+        crop_size_val: Union[int, Tuple[int, int], Tuple[int, int, int]] = 512,
+        crop_size_depth_val: int = 32,
         **kwargs,
     ):
         self.crop_size = crop_size
@@ -263,6 +265,8 @@ class SpotiflowTrainingConfig(SpotiflowConfig):
         self.finetuned_from = finetuned_from
         self.early_stopping_patience = early_stopping_patience
         self.crop_size_depth = crop_size_depth # FIXME: should be done w crop_size argument
+        self.crop_size_val = crop_size_val
+        self.crop_size_depth_val = crop_size_depth_val
         super().__init__()
 
     def is_valid(self):
@@ -274,7 +278,8 @@ class SpotiflowTrainingConfig(SpotiflowConfig):
             "mse",
             "smoothl1",
             "adawing",
-        }, "heatmap_loss_f must be either 'bce', 'mse', 'smoothl1', or 'adawing'"
+            "jsd",
+        }, "heatmap_loss_f must be either 'bce', 'mse', 'smoothl1', 'jsd' or 'adawing'"
         assert self.flow_loss_f in {
             "l1",
         }, "flow_loss_f must be 'l1'"
@@ -297,3 +302,9 @@ class SpotiflowTrainingConfig(SpotiflowConfig):
         assert (
             isinstance(self.crop_size_depth, int) and self.crop_size_depth > 0
         ), "crop_size_depth must be an integer > 0."
+        assert (
+            isinstance(self.crop_size_val, int) and self.crop_size_val > 0
+        )
+        assert (
+            isinstance(self.crop_size_depth_val, int) and self.crop_size_depth_val > 0
+        ), "crop_size_depth_val must be an integer > 0."

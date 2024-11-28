@@ -399,13 +399,19 @@ class Spotiflow(nn.Module):
         min_crop_size = int(2 ** np.floor(np.log2(min_img_size)))
 
         crop_size = tuple(2 * [min(train_config.crop_size, min_crop_size)])
-
+        crop_size_val = tuple(2 * [min(train_config.crop_size_val, min_crop_size)])
         if self.config.is_3d:
             min_depth_size = min(img.shape[-3] for img in train_images)
             min_crop_size_depth = int(2 ** np.floor(np.log2(min_depth_size)))
             crop_size = (
                 min(train_config.crop_size_depth, min_crop_size_depth),
             ) + crop_size
+
+            min_depth_size_val = min(img.shape[-3] for img in val_images)
+            min_crop_size_depth_val = int(2 ** np.floor(np.log2(min_depth_size_val)))
+            crop_size_val = (
+                min(train_config.crop_size_depth_val, min_crop_size_depth_val),
+            ) + crop_size_val
 
         point_priority = 0.8 if train_config.smart_crop else 0.0
 
@@ -427,7 +433,7 @@ class Spotiflow(nn.Module):
                 crop_size, point_priority=point_priority
             )
         val_augmenter = self.build_image_cropper(
-            crop_size, point_priority=point_priority
+            crop_size_val, point_priority=point_priority
         )
 
         ActualSpotsDataset = SpotsDataset if not self.config.is_3d else Spots3DDataset

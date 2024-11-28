@@ -12,7 +12,7 @@ import torch
 import torch.nn as nn
 
 from .config import SpotiflowTrainingConfig
-from .losses import AdaptiveWingLoss
+from .losses import AdaptiveWingLoss, JensenShannonDivergence
 from ..data import collate_spots
 from ..utils import prob_to_points, points_matching_dataset, remove_device_id_from_device_str
 
@@ -118,6 +118,8 @@ class SpotiflowTrainingWrapper(pl.LightningModule):
             loss_cls = nn.MSELoss
         elif heatmap_loss_f_str == "smoothl1":
             loss_cls = nn.SmoothL1Loss
+        elif heatmap_loss_f_str == "jsd":
+            loss_cls = JensenShannonDivergence
         else:
             raise NotImplementedError(f"Loss function {heatmap_loss_f_str} not implemented.")
         return tuple(

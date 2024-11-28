@@ -1,1 +1,2 @@
 from .adaptive_wing import AdaptiveWingLoss
+from .jensen_shannon import JensenShannonDivergence
