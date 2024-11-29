@@ -1125,20 +1125,18 @@ class Spotiflow(nn.Module):
 
             points = np.concatenate(points, axis=0)
 
-        # Remove padding
-        padding_to_correct = (padding[0][0], padding[1][0])
-        if self.config.is_3d:
-            padding_to_correct = (*padding_to_correct, padding[2][0])
-        
-        pts = [None]*len(points)
-        for i in range(len(points)):
-            pts[i] = points[i] - np.array(padding_to_correct)[None] / corr_grid
+            # Remove padding
+            padding_to_correct = (padding[0][0], padding[1][0])
+            if self.config.is_3d:
+                padding_to_correct = (*padding_to_correct, padding[2][0])
+            points = points - np.array(padding_to_correct)[None] / corr_grid
         # probs = np.asarray(probs)
         # if scale is not None and scale != 1:
         #     points = np.round((points.astype(float) / scale)).astype(int)
         # probs = filter_shape(probs, out_shape, idxr_array=points)
+        pts = [None]*len(points)
         for i in range(len(points)):
-            pts[i] = filter_shape(pts[i], out_shape, idxr_array=points[i])
+            pts[i] = filter_shape(points[i], out_shape, idxr_array=points[i])
 
         if self.config.is_3d and any(s > 1 for s in self.config.grid):
             for i in range(len(pts)):
