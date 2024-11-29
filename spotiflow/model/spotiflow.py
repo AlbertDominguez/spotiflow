@@ -953,9 +953,8 @@ class Spotiflow(nn.Module):
                 )
                 curr_probs = ys[cl][tuple(curr_pts.astype(int).T)].tolist()
                 if subpix_radius >= 0:
-                    subpix_tile = flow_to_vector(flow[cl], sigma=self.config.sigma)
                     _offset = subpixel_offset(
-                        curr_pts, subpix_tile, ys[cl], radius=subpix_radius
+                        curr_pts, _subpix[cl], ys[cl], radius=subpix_radius
                     )
                     curr_pts = curr_pts + _offset
 
