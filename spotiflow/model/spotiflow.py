@@ -979,9 +979,10 @@ class Spotiflow(nn.Module):
                 
             _n_tiles_progress = sum(1 for _ in tile_iterator(x, n_tiles=actual_n_tiles, block_sizes=div_by, n_block_overlaps=n_block_overlaps))
             if distributed_params is not None:
-                gpu_id = distributed_params.get("gpu_id", 0)
+                gpu_id = distributed_params["gpu_id"]
+
                 iter_tiles = parallel_tile_iterator(
-                    x,
+                    x if not distributed_params.get("zarr_path", False) else distributed_params.get("zarr_path"),
                     n_tiles=actual_n_tiles,
                     block_sizes=div_by,
                     n_block_overlaps=n_block_overlaps,
@@ -989,6 +990,10 @@ class Spotiflow(nn.Module):
                     num_replicas=distributed_params.get(
                         "num_replicas", torch.cuda.device_count()
                     ),
+                    component=distributed_params.get("component", None),
+                    storage_options=distributed_params.get("storage_options", {}),
+                    normalize_pcts=distributed_params.get("normalize_pcts", None),
+                    progress_n_tiles=_n_tiles_progress,
                     dataloader_kwargs=distributed_params,
                 )
             else:
