@@ -1143,19 +1143,22 @@ class Spotiflow(nn.Module):
             log.info(f"Found {len(pts)} spots")
 
         # Retrieve intensity of the spots
-        if (
-            subpix_radius < 0
-        ):  # no need to interpolate if subpixel precision is not used
-            intens = img[tuple(pts.astype(int).T)]
+        if not skip_details:
+            if (
+                subpix_radius < 0
+            ):  # no need to interpolate if subpixel precision is not used
+                intens = img[tuple(pts.astype(int).T)]
+            else:
+                try:
+                    _interp_fun = spline_interp_points_2d if not self.config.is_3d else spline_interp_points_3d
+                    intens = _interp_fun(img, pts)
+                except Exception as _:
+                    log.warning(
+                        "Spline interpolation failed to retrieve spot intensities. Will use nearest neighbour interpolation instead."
+                    )
+                    intens = img[tuple(pts.round().astype(int).T)]
         else:
-            try:
-                _interp_fun = spline_interp_points_2d if not self.config.is_3d else spline_interp_points_3d
-                intens = _interp_fun(img, pts)
-            except Exception as _:
-                log.warning(
-                    "Spline interpolation failed to retrieve spot intensities. Will use nearest neighbour interpolation instead."
-                )
-                intens = img[tuple(pts.round().astype(int).T)]
+            intens = None
         details = SimpleNamespace(
             prob=probs, heatmap=y, subpix=_subpix, flow=flow, intens=intens,
             fit_params=fit_params
